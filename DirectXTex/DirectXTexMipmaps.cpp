@@ -3,17 +3,13 @@
 //  
 // DirectX Texture Library - Mip-map generation
 //
-// THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-// THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 //
 // http://go.microsoft.com/fwlink/?LinkId=248926
 //-------------------------------------------------------------------------------------
 
-#include "directxtexp.h"
+#include "DirectXTexp.h"
 
 #include "filters.h"
 
@@ -365,6 +361,9 @@ namespace DirectX
 
         if (SUCCEEDED(hr))
         {
+            if (img->rowPitch > UINT32_MAX || img->slicePitch > UINT32_MAX)
+                return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
+
             ComPtr<IWICBitmap> wicBitmap;
             hr = EnsureWicBitmapPixelFormat(pWIC, resizedColorWithAlpha.Get(), filter, desiredPixelFormat, wicBitmap.GetAddressOf());
             if (SUCCEEDED(hr))
@@ -472,6 +471,9 @@ namespace
         size_t width = baseImage.width;
         size_t height = baseImage.height;
 
+        if (baseImage.rowPitch > UINT32_MAX || baseImage.slicePitch > UINT32_MAX)
+            return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
+
         ComPtr<IWICBitmap> source;
         HRESULT hr = pWIC->CreateBitmapFromMemory(static_cast<UINT>(width), static_cast<UINT>(height), pfGUID,
             static_cast<UINT>(baseImage.rowPitch), static_cast<UINT>(baseImage.slicePitch),
@@ -540,6 +542,9 @@ namespace
                 if (FAILED(hr))
                     return hr;
 
+                if (img->rowPitch > UINT32_MAX || img->slicePitch > UINT32_MAX)
+                    return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
+
                 hr = scaler->Initialize(source.Get(), static_cast<UINT>(width), static_cast<UINT>(height), _GetWICInterp(filter));
                 if (FAILED(hr))
                     return hr;
@@ -551,7 +556,7 @@ namespace
 
                 if (memcmp(&pfScaler, &pfGUID, sizeof(WICPixelFormatGUID)) == 0)
                 {
-                    hr = scaler->CopyPixels(0, static_cast<UINT>(img->rowPitch), static_cast<UINT>(img->slicePitch), img->pixels);
+                    hr = scaler->CopyPixels(nullptr, static_cast<UINT>(img->rowPitch), static_cast<UINT>(img->slicePitch), img->pixels);
                     if (FAILED(hr))
                         return hr;
                 }
@@ -575,7 +580,7 @@ namespace
                     if (FAILED(hr))
                         return hr;
 
-                    hr = FC->CopyPixels(0, static_cast<UINT>(img->rowPitch), static_cast<UINT>(img->slicePitch), img->pixels);
+                    hr = FC->CopyPixels(nullptr, static_cast<UINT>(img->rowPitch), static_cast<UINT>(img->slicePitch), img->pixels);
                     if (FAILED(hr))
                         return hr;
                 }
@@ -658,7 +663,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (2 scanlines)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 2), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 2), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -745,7 +750,7 @@ namespace
             return E_FAIL;
 
         // Allocate temporary space (3 scanlines)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 3), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 3), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -836,7 +841,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (3 scanlines, plus X and Y filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 3), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 3), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -947,7 +952,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (5 scanlines, plus X and Y filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -1135,7 +1140,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate initial temporary space (1 scanline, accumulation rows, plus X and Y filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * width, 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * width, 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -1218,13 +1223,13 @@ namespace
                         {
                             // Steal and reuse scanline from 'free row' list
                             // (it will always be at least as wide as nwidth due to loop decending order)
-                            assert(rowFree->scanline != 0);
+                            assert(rowFree->scanline != nullptr);
                             rowAcc->scanline.reset(rowFree->scanline.release());
                             rowFree = rowFree->next;
                         }
                         else
                         {
-                            rowAcc->scanline.reset(reinterpret_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * nwidth, 16)));
+                            rowAcc->scanline.reset(static_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * nwidth, 16)));
                             if (!rowAcc->scanline)
                                 return E_OUTOFMEMORY;
                         }
@@ -1403,7 +1408,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (2 scanlines)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 2), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 2), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -1552,7 +1557,7 @@ namespace
             return E_FAIL;
 
         // Allocate temporary space (5 scanlines)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -1721,7 +1726,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (5 scanlines, plus X/Y/Z filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 5), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -1914,7 +1919,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate temporary space (17 scanlines, plus X/Y/Z filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 17), 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc((sizeof(XMVECTOR)*width * 17), 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -2295,7 +2300,7 @@ namespace
         size_t height = mipChain.GetMetadata().height;
 
         // Allocate initial temporary space (1 scanline, accumulation rows, plus X/Y/Z filters)
-        ScopedAlignedArrayXMVECTOR scanline(reinterpret_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * width, 16)));
+        ScopedAlignedArrayXMVECTOR scanline(static_cast<XMVECTOR*>(_aligned_malloc(sizeof(XMVECTOR) * width, 16)));
         if (!scanline)
             return E_OUTOFMEMORY;
 
@@ -2372,14 +2377,14 @@ namespace
                         {
                             // Steal and reuse scanline from 'free slice' list
                             // (it will always be at least as large as nwidth*nheight due to loop decending order)
-                            assert(sliceFree->scanline != 0);
+                            assert(sliceFree->scanline != nullptr);
                             sliceAcc->scanline.reset(sliceFree->scanline.release());
                             sliceFree = sliceFree->next;
                         }
                         else
                         {
                             size_t bytes = sizeof(XMVECTOR) * nwidth * nheight;
-                            sliceAcc->scanline.reset(reinterpret_cast<XMVECTOR*>(_aligned_malloc(bytes, 16)));
+                            sliceAcc->scanline.reset(static_cast<XMVECTOR*>(_aligned_malloc(bytes, 16)));
                             if (!sliceAcc->scanline)
                                 return E_OUTOFMEMORY;
                         }
@@ -2555,11 +2560,30 @@ HRESULT DirectX::GenerateMipMaps(
         return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
     }
 
-    HRESULT hr;
+    HRESULT hr = E_UNEXPECTED;
 
     static_assert(TEX_FILTER_POINT == 0x100000, "TEX_FILTER_ flag values don't match TEX_FILTER_MASK");
 
-    if (UseWICFiltering(baseImage.format, filter))
+    bool usewic = UseWICFiltering(baseImage.format, filter);
+
+    WICPixelFormatGUID pfGUID = {};
+    bool wicpf = (usewic) ? _DXGIToWIC(baseImage.format, pfGUID, true) : false;
+
+    if (usewic && !wicpf)
+    {
+        // Check to see if the source and/or result size is too big for WIC
+        uint64_t expandedSize = uint64_t(std::max<size_t>(1, baseImage.width >> 1)) * uint64_t(std::max<size_t>(1, baseImage.height >> 1)) * sizeof(float) * 4;
+        uint64_t expandedSize2 = uint64_t(baseImage.width) * uint64_t(baseImage.height) * sizeof(float) * 4;
+        if (expandedSize > UINT32_MAX || expandedSize2 > UINT32_MAX)
+        {
+            if (filter & TEX_FILTER_FORCE_WIC)
+                return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
+
+            usewic = false;
+        }
+    }
+
+    if (usewic)
     {
         //--- Use WIC filtering to generate mipmaps -----------------------------------
         switch (filter & TEX_FILTER_MASK)
@@ -2572,8 +2596,7 @@ HRESULT DirectX::GenerateMipMaps(
         {
             static_assert(TEX_FILTER_FANT == TEX_FILTER_BOX, "TEX_FILTER_ flag alias mismatch");
 
-            WICPixelFormatGUID pfGUID;
-            if (_DXGIToWIC(baseImage.format, pfGUID, true))
+            if (wicpf)
             {
                 // Case 1: Base image format is supported by Windows Imaging Component
                 hr = (baseImage.height > 1 || !allow1D)
@@ -2613,7 +2636,6 @@ HRESULT DirectX::GenerateMipMaps(
                 return _ConvertFromR32G32B32A32(tMipChain.GetImages(), tMipChain.GetImageCount(), tMipChain.GetMetadata(), baseImage.format, mipChain);
             }
         }
-        break;
 
         default:
             return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
@@ -2748,11 +2770,33 @@ HRESULT DirectX::GenerateMipMaps(
 
     assert(baseImages.size() == metadata.arraySize);
 
-    HRESULT hr;
+    HRESULT hr = E_UNEXPECTED;
+
+    if (baseImages.empty())
+        return hr;
 
     static_assert(TEX_FILTER_POINT == 0x100000, "TEX_FILTER_ flag values don't match TEX_FILTER_MASK");
 
-    if (!metadata.IsPMAlpha() && UseWICFiltering(metadata.format, filter))
+    bool usewic = !metadata.IsPMAlpha() && UseWICFiltering(metadata.format, filter);
+
+    WICPixelFormatGUID pfGUID = {};
+    bool wicpf = (usewic) ? _DXGIToWIC(metadata.format, pfGUID, true) : false;
+
+    if (usewic && !wicpf)
+    {
+        // Check to see if the source and/or result size is too big for WIC
+        uint64_t expandedSize = uint64_t(std::max<size_t>(1, metadata.width >> 1)) * uint64_t(std::max<size_t>(1, metadata.height >> 1)) * sizeof(float) * 4;
+        uint64_t expandedSize2 = uint64_t(metadata.width) * uint64_t(metadata.height) * sizeof(float) * 4;
+        if (expandedSize > UINT32_MAX || expandedSize2 > UINT32_MAX)
+        {
+            if (filter & TEX_FILTER_FORCE_WIC)
+                return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
+
+            usewic = false;
+        }
+    }
+
+    if (usewic)
     {
         //--- Use WIC filtering to generate mipmaps -----------------------------------
         switch (filter & TEX_FILTER_MASK)
@@ -2765,8 +2809,7 @@ HRESULT DirectX::GenerateMipMaps(
         {
             static_assert(TEX_FILTER_FANT == TEX_FILTER_BOX, "TEX_FILTER_ flag alias mismatch");
 
-            WICPixelFormatGUID pfGUID;
-            if (_DXGIToWIC(metadata.format, pfGUID, true))
+            if (wicpf)
             {
                 // Case 1: Base image format is supported by Windows Imaging Component
                 TexMetadata mdata2 = metadata;
@@ -2819,7 +2862,6 @@ HRESULT DirectX::GenerateMipMaps(
                 return _ConvertFromR32G32B32A32(tMipChain.GetImages(), tMipChain.GetImageCount(), tMipChain.GetMetadata(), metadata.format, mipChain);
             }
         }
-        break;
 
         default:
             return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
@@ -2956,7 +2998,7 @@ HRESULT DirectX::GenerateMipMaps3D(
 
     static_assert(TEX_FILTER_POINT == 0x100000, "TEX_FILTER_ flag values don't match TEX_FILTER_MASK");
 
-    HRESULT hr;
+    HRESULT hr = E_UNEXPECTED;
 
     DWORD filter_select = (filter & TEX_FILTER_MASK);
     if (!filter_select)
@@ -3070,7 +3112,7 @@ HRESULT DirectX::GenerateMipMaps3D(
 
     assert(baseImages.size() == metadata.depth);
 
-    HRESULT hr;
+    HRESULT hr = E_UNEXPECTED;
 
     static_assert(TEX_FILTER_POINT == 0x100000, "TEX_FILTER_ flag values don't match TEX_FILTER_MASK");
 

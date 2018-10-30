@@ -1,10 +1,6 @@
 @echo off
-rem THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
-rem ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-rem THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-rem PARTICULAR PURPOSE.
-rem
 rem Copyright (c) Microsoft Corporation. All rights reserved.
+rem Licensed under the MIT License.
 
 setlocal
 set error=0
@@ -21,6 +17,7 @@ if exist %PCFXC% goto continue
 set PCFXC=fxc.exe
 
 :continue
+@if not exist Compiled mkdir Compiled
 call :CompileShader BC7Encode TryMode456CS
 call :CompileShader BC7Encode TryMode137CS
 call :CompileShader BC7Encode TryMode02CS
